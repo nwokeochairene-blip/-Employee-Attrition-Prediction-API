@@ -4,6 +4,7 @@ import pandas as pd
 import joblib
 from typing import Optional
 import uvicorn
+import os  # <-- ADD THIS IMPORT
 
 FEATURE_COLUMNS = [
     'Age', 'BusinessTravel', 'DailyRate', 'Department', 'DistanceFromHome',
@@ -205,4 +206,6 @@ async def predict_attrition(employee: EmployeeData):
         raise HTTPException(status_code=400, detail=f'Error making prediction: {exc}')
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # CHANGE THIS LINE - use Render's PORT environment variable
+    port = int(os.environ.get("PORT", 8000))  # Defaults to 8000 locally
+    uvicorn.run(app, host="0.0.0.0", port=port)
