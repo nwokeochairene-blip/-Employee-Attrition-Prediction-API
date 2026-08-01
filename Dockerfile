@@ -16,5 +16,5 @@ COPY . .
 ENV PORT=10000
 EXPOSE $PORT
 
-# Use gunicorn with the correct port
-CMD gunicorn --bind 0.0.0.0:$PORT app:app
+# Use Uvicorn directly - NOT Gunicorn!
+CMD uvicorn app:app --host 0.0.0.0 --port $PORT
