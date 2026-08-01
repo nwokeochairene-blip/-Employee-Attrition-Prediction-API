@@ -9,6 +9,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN python -m pip install --upgrade pip && \
     python -m pip install --no-cache-dir -r requirements.txt
+
 COPY . .
-EXPOSE 5000
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+
+# Use Render's PORT environment variable
+ENV PORT=10000
+EXPOSE $PORT
+
+# Use gunicorn with the correct port
+CMD gunicorn --bind 0.0.0.0:$PORT app:app

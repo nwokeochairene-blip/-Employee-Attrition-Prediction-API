@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: employee-attrition-prediction
+    runtime: image
+    repo: https://github.com/nwokeochairene-blip/-Employee-Attrition-Prediction-API
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: WEB_CONCURRENCY
+        value: 1
