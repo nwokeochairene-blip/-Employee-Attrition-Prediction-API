@@ -1,44 +1,33 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
-import joblib
-import logging
+import pickle
 import os
 from typing import Optional
+import logging
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Setup logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="Employee Attrition Prediction API",
-    description="Predict employee attrition based on various features",
-    version="1.0.0"
-)
+app = FastAPI(title="Employee Attrition Prediction API")
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Define the input data model based on your model's features
+# Define the EmployeeData model with ALL 30 features
 class EmployeeData(BaseModel):
     Age: int
+    BusinessTravel: str
     DailyRate: int
+    Department: str
     DistanceFromHome: int
     Education: int
+    EducationField: str
     EnvironmentSatisfaction: int
+    Gender: str
+    HourlyRate: int
     JobInvolvement: int
     JobLevel: int
+    JobRole: str
     JobSatisfaction: int
     MaritalStatus: str
     MonthlyIncome: int
@@ -57,295 +46,110 @@ class EmployeeData(BaseModel):
     YearsSinceLastPromotion: int
     YearsWithCurrManager: int
 
-# Load model (adjust path if needed)
-MODEL_PATH = os.environ.get("MODEL_PATH", "model.pkl")
+# Load model and encoders
 model = None
+label_encoders = None
+scaler = None
+MODEL_PATH = os.environ.get("MODEL_PATH", "model.pkl")
 
 try:
-    model = joblib.load(MODEL_PATH)
+    with open(MODEL_PATH, "rb") as f:
+        model = pickle.load(f)
     logger.info(f"Model loaded successfully from {MODEL_PATH}")
 except Exception as e:
     logger.error(f"Failed to load model: {e}")
 
-@app.on_event("startup")
-async def startup_event():
-    """Log when the app starts up"""
-    logger.info("Application starting up...")
+# Load label encoders if they exist
+try:
+    with open("label_encoders.pkl", "rb") as f:
+        label_encoders = pickle.load(f)
+    logger.info("Label encoders loaded successfully")
+except Exception as e:
+    logger.warning(f"Label encoders not loaded: {e}")
+
+# Load scaler if it exists
+try:
+    with open("scaler.pkl", "rb") as f:
+        scaler = pickle.load(f)
+    logger.info("Scaler loaded successfully")
+except Exception as e:
+    logger.warning(f"Scaler not loaded: {e}")
 
 @app.get("/", response_class=HTMLResponse)
-async def home():
+async def serve_frontend():
     """Serve the HTML interface"""
-    html_content = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Employee Attrition Predictor</title>
-        <style>
-            body { 
-                font-family: Arial, sans-serif; 
-                max-width: 800px; 
-                margin: 40px auto; 
-                padding: 20px;
-                background: #f5f5f5;
-            }
-            .container {
-                background: white;
-                padding: 30px;
-                border-radius: 10px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            }
-            h1 { color: #333; text-align: center; }
-            .form-group {
-                margin: 15px 0;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            label {
-                font-weight: bold;
-                width: 40%;
-                color: #555;
-            }
-            input, select {
-                padding: 8px 12px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                width: 55%;
-            }
-            button {
-                width: 100%;
-                padding: 12px;
-                background: #007bff;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-size: 16px;
-                cursor: pointer;
-                margin-top: 20px;
-            }
-            button:hover { background: #0056b3; }
-            #result {
-                margin-top: 20px;
-                padding: 20px;
-                border-radius: 4px;
-                display: none;
-            }
-            .attrition-high {
-                background: #ffebee;
-                color: #c62828;
-                border: 1px solid #ef5350;
-            }
-            .attrition-low {
-                background: #e8f5e9;
-                color: #2e7d32;
-                border: 1px solid #66bb6a;
-            }
-            .error {
-                background: #fff3e0;
-                color: #e65100;
-                border: 1px solid #ffa726;
-            }
-            .footer {
-                text-align: center;
-                margin-top: 20px;
-                color: #888;
-                font-size: 14px;
-            }
-            .footer a { color: #007bff; text-decoration: none; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🏢 Employee Attrition Predictor</h1>
-            <p style="text-align: center; color: #666;">Enter employee details to predict if they are likely to leave</p>
-            
-            <form id="predictionForm">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <!-- Personal Information -->
-                    <div class="form-group"><label>Age:</label><input type="number" id="Age" value="35" required></div>
-                    <div class="form-group"><label>Distance From Home:</label><input type="number" id="DistanceFromHome" value="10" required></div>
-                    <div class="form-group"><label>Education (1-5):</label><input type="number" id="Education" value="2" min="1" max="5" required></div>
-                    <div class="form-group"><label>Marital Status:</label>
-                        <select id="MaritalStatus">
-                            <option value="Single">Single</option>
-                            <option value="Married" selected>Married</option>
-                            <option value="Divorced">Divorced</option>
-                        </select>
-                    </div>
-                    
-                    <!-- Job Information -->
-                    <div class="form-group"><label>Job Level:</label><input type="number" id="JobLevel" value="2" min="1" max="5" required></div>
-                    <div class="form-group"><label>Monthly Income:</label><input type="number" id="MonthlyIncome" value="5000" required></div>
-                    <div class="form-group"><label>Daily Rate:</label><input type="number" id="DailyRate" value="500" required></div>
-                    <div class="form-group"><label>Monthly Rate:</label><input type="number" id="MonthlyRate" value="10000" required></div>
-                    
-                    <!-- Work Experience -->
-                    <div class="form-group"><label>Total Working Years:</label><input type="number" id="TotalWorkingYears" value="10" required></div>
-                    <div class="form-group"><label>Years at Company:</label><input type="number" id="YearsAtCompany" value="5" required></div>
-                    <div class="form-group"><label>Years in Current Role:</label><input type="number" id="YearsInCurrentRole" value="3" required></div>
-                    <div class="form-group"><label>Years Since Last Promotion:</label><input type="number" id="YearsSinceLastPromotion" value="1" required></div>
-                    <div class="form-group"><label>Years With Current Manager:</label><input type="number" id="YearsWithCurrManager" value="3" required></div>
-                    
-                    <!-- Performance & Satisfaction -->
-                    <div class="form-group"><label>Environment Satisfaction (1-4):</label><input type="number" id="EnvironmentSatisfaction" value="3" min="1" max="4" required></div>
-                    <div class="form-group"><label>Job Satisfaction (1-4):</label><input type="number" id="JobSatisfaction" value="4" min="1" max="4" required></div>
-                    <div class="form-group"><label>Work Life Balance (1-4):</label><input type="number" id="WorkLifeBalance" value="3" min="1" max="4" required></div>
-                    <div class="form-group"><label>Relationship Satisfaction (1-4):</label><input type="number" id="RelationshipSatisfaction" value="3" min="1" max="4" required></div>
-                    
-                    <!-- Other Factors -->
-                    <div class="form-group"><label>Over Time:</label>
-                        <select id="OverTime">
-                            <option value="No" selected>No</option>
-                            <option value="Yes">Yes</option>
-                        </select>
-                    </div>
-                    <div class="form-group"><label>Job Involvement (1-4):</label><input type="number" id="JobInvolvement" value="3" min="1" max="4" required></div>
-                    <div class="form-group"><label>Performance Rating (1-4):</label><input type="number" id="PerformanceRating" value="3" min="1" max="4" required></div>
-                    <div class="form-group"><label>Percent Salary Hike:</label><input type="number" id="PercentSalaryHike" value="15" required></div>
-                    <div class="form-group"><label>Num Companies Worked:</label><input type="number" id="NumCompaniesWorked" value="2" required></div>
-                    <div class="form-group"><label>Training Times Last Year:</label><input type="number" id="TrainingTimesLastYear" value="2" required></div>
-                    <div class="form-group"><label>Stock Option Level:</label><input type="number" id="StockOptionLevel" value="1" min="0" max="3" required></div>
-                </div>
-                
-                <button type="submit">🔍 Predict Attrition</button>
-            </form>
-            
-            <div id="result"></div>
-            <div class="footer">
-                <a href="/docs" target="_blank">API Documentation</a> | 
-                <a href="/openapi.json" target="_blank">OpenAPI Spec</a>
-            </div>
-        </div>
-
-        <script>
-            document.getElementById('predictionForm').onsubmit = async (e) => {
-                e.preventDefault();
-                
-                const resultDiv = document.getElementById('result');
-                resultDiv.style.display = 'block';
-                resultDiv.className = '';
-                resultDiv.innerHTML = '⏳ Predicting...';
-                
-                // Collect all form data
-                const formData = {
-                    Age: parseInt(document.getElementById('Age').value),
-                    DailyRate: parseInt(document.getElementById('DailyRate').value),
-                    DistanceFromHome: parseInt(document.getElementById('DistanceFromHome').value),
-                    Education: parseInt(document.getElementById('Education').value),
-                    EnvironmentSatisfaction: parseInt(document.getElementById('EnvironmentSatisfaction').value),
-                    JobInvolvement: parseInt(document.getElementById('JobInvolvement').value),
-                    JobLevel: parseInt(document.getElementById('JobLevel').value),
-                    JobSatisfaction: parseInt(document.getElementById('JobSatisfaction').value),
-                    MaritalStatus: document.getElementById('MaritalStatus').value,
-                    MonthlyIncome: parseInt(document.getElementById('MonthlyIncome').value),
-                    MonthlyRate: parseInt(document.getElementById('MonthlyRate').value),
-                    NumCompaniesWorked: parseInt(document.getElementById('NumCompaniesWorked').value),
-                    OverTime: document.getElementById('OverTime').value,
-                    PercentSalaryHike: parseInt(document.getElementById('PercentSalaryHike').value),
-                    PerformanceRating: parseInt(document.getElementById('PerformanceRating').value),
-                    RelationshipSatisfaction: parseInt(document.getElementById('RelationshipSatisfaction').value),
-                    StockOptionLevel: parseInt(document.getElementById('StockOptionLevel').value),
-                    TotalWorkingYears: parseInt(document.getElementById('TotalWorkingYears').value),
-                    TrainingTimesLastYear: parseInt(document.getElementById('TrainingTimesLastYear').value),
-                    WorkLifeBalance: parseInt(document.getElementById('WorkLifeBalance').value),
-                    YearsAtCompany: parseInt(document.getElementById('YearsAtCompany').value),
-                    YearsInCurrentRole: parseInt(document.getElementById('YearsInCurrentRole').value),
-                    YearsSinceLastPromotion: parseInt(document.getElementById('YearsSinceLastPromotion').value),
-                    YearsWithCurrManager: parseInt(document.getElementById('YearsWithCurrManager').value)
-                };
-                
-                try {
-                    const response = await fetch('/predict', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(formData)
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (response.ok) {
-                        if (result.prediction === 1) {
-                            resultDiv.className = 'attrition-high';
-                            resultDiv.innerHTML = `<strong>⚠️ ATTRITION RISK</strong><br>
-                                This employee is likely to leave the company.<br>
-                                Confidence: ${result.confidence ? (result.confidence * 100).toFixed(1) + '%' : 'N/A'}`;
-                        } else {
-                            resultDiv.className = 'attrition-low';
-                            resultDiv.innerHTML = `<strong>✅ LOW RISK</strong><br>
-                                This employee is likely to stay with the company.<br>
-                                Confidence: ${result.confidence ? (result.confidence * 100).toFixed(1) + '%' : 'N/A'}`;
-                        }
-                    } else {
-                        resultDiv.className = 'error';
-                        resultDiv.innerHTML = `<strong>❌ Error</strong><br>${result.detail || 'Something went wrong'}`;
-                    }
-                } catch (error) {
-                    resultDiv.className = 'error';
-                    resultDiv.innerHTML = `<strong>❌ Error</strong><br>${error.message}`;
-                }
-            };
-        </script>
-    </body>
-    </html>
-    """
-    return html_content
+    try:
+        with open("index.html", "r") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        return HTMLResponse(content="<h1>Frontend not found</h1><p>Please ensure index.html is in the root directory.</p>")
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {
-        "status": "healthy",
+        "status": "healthy" if model is not None else "unhealthy",
         "model_loaded": model is not None,
         "model_path": MODEL_PATH
     }
 
 @app.post("/predict")
 async def predict(data: EmployeeData):
-    """
-    Predict employee attrition based on input features
-    """
+    """Predict employee attrition based on input features"""
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
-    
+
     try:
-        # Convert input to dataframe
+        # Convert to DataFrame
         input_df = pd.DataFrame([data.dict()])
         
-        # Make prediction
-        prediction = model.predict(input_df)
+        # If you have label encoders, apply them
+        if label_encoders:
+            for col in label_encoders:
+                if col in input_df.columns:
+                    input_df[col] = label_encoders[col].transform(input_df[col])
         
-        # Get prediction probability if available
-        confidence = None
+        # If you have a scaler, apply it
+        if scaler:
+            # Get numeric columns (exclude categorical ones)
+            numeric_cols = input_df.select_dtypes(include=['int64', 'float64']).columns
+            input_df[numeric_cols] = scaler.transform(input_df[numeric_cols])
+        
+        # Make prediction
+        prediction = model.predict(input_df)[0]
+        
+        # Get probability if available
+        probability = None
         if hasattr(model, 'predict_proba'):
-            probabilities = model.predict_proba(input_df)
-            confidence = float(probabilities[0][prediction[0]])
+            proba = model.predict_proba(input_df)[0]
+            probability = float(proba[1]) if len(proba) > 1 else float(proba[0])
         
         return {
-            "prediction": int(prediction[0]),
-            "confidence": confidence,
-            "prediction_label": "Attrition" if prediction[0] == 1 else "No Attrition"
+            "prediction": int(prediction),
+            "probability": probability,
+            "confidence": probability if probability else None
         }
+    
     except Exception as e:
         logger.error(f"Prediction error: {e}")
-        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/metrics")
 async def get_metrics():
-    """Return model performance metrics"""
-    # Update these with your actual model metrics
+    """Get model metrics (placeholder)"""
     return {
         "accuracy": 0.85,
-        "precision": 0.82,
-        "recall": 0.79,
-        "f1_score": 0.80,
-        "model_loaded": model is not None
+        "precision": 0.83,
+        "recall": 0.81,
+        "f1_score": 0.82
     }
 
 @app.get("/model-info")
 async def model_info():
-    """Get information about the loaded model"""
+    """Get model information"""
     return {
         "model_loaded": model is not None,
         "model_path": MODEL_PATH,
-        "model_type": str(type(model).__name__) if model else None
+        "model_type": str(type(model).__name__) if model else None,
+        "features_expected": 30  # Updated to 30
     }
