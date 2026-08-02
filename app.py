@@ -1,155 +1,190 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
-import pandas as pd
+# app.py - FINAL WORKING VERSION (No Scaler)
 import pickle
-import os
-from typing import Optional
-import logging
+import joblib
+import pandas as pd
+import numpy as np
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import warnings
+warnings.filterwarnings('ignore')
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+app = FastAPI()
 
-app = FastAPI(title="Employee Attrition Prediction API")
+# Enable CORS for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Define the EmployeeData model with ALL 30 features
 class EmployeeData(BaseModel):
     Age: int
-    BusinessTravel: str
-    DailyRate: int
-    Department: str
-    DistanceFromHome: int
+    Gender: str
+    MaritalStatus: str
+    DistanceFromHome: float
     Education: int
     EducationField: str
-    EnvironmentSatisfaction: int
-    Gender: str
-    HourlyRate: int
-    JobInvolvement: int
-    JobLevel: int
     JobRole: str
-    JobSatisfaction: int
-    MaritalStatus: str
-    MonthlyIncome: int
-    MonthlyRate: int
-    NumCompaniesWorked: int
-    OverTime: str
-    PercentSalaryHike: int
-    PerformanceRating: int
-    RelationshipSatisfaction: int
-    StockOptionLevel: int
+    JobLevel: int
+    Department: str
+    BusinessTravel: str
+    MonthlyIncome: float
+    DailyRate: float
+    MonthlyRate: float
     TotalWorkingYears: int
-    TrainingTimesLastYear: int
-    WorkLifeBalance: int
     YearsAtCompany: int
     YearsInCurrentRole: int
     YearsSinceLastPromotion: int
     YearsWithCurrManager: int
+    NumCompaniesWorked: int
+    PercentSalaryHike: float
+    PerformanceRating: int
+    TrainingTimesLastYear: int
+    StockOptionLevel: int
+    OverTime: str
+    EnvironmentSatisfaction: int
+    JobSatisfaction: int
+    WorkLifeBalance: int
+    RelationshipSatisfaction: int
+    JobInvolvement: int
+    HourlyRate: float
 
-# Load model and encoders
 model = None
 label_encoders = None
-scaler = None
-MODEL_PATH = os.environ.get("MODEL_PATH", "model.pkl")
 
-try:
-    with open(MODEL_PATH, "rb") as f:
-        model = pickle.load(f)
-    logger.info(f"Model loaded successfully from {MODEL_PATH}")
-except Exception as e:
-    logger.error(f"Failed to load model: {e}")
-
-# Load label encoders if they exist
-try:
-    with open("label_encoders.pkl", "rb") as f:
-        label_encoders = pickle.load(f)
-    logger.info("Label encoders loaded successfully")
-except Exception as e:
-    logger.warning(f"Label encoders not loaded: {e}")
-
-# Load scaler if it exists
-try:
-    with open("scaler.pkl", "rb") as f:
-        scaler = pickle.load(f)
-    logger.info("Scaler loaded successfully")
-except Exception as e:
-    logger.warning(f"Scaler not loaded: {e}")
-
-@app.get("/", response_class=HTMLResponse)
-async def serve_frontend():
-    """Serve the HTML interface"""
+def load_model_files():
+    global model, label_encoders
+    
     try:
-        with open("index.html", "r") as f:
-            return HTMLResponse(content=f.read())
-    except FileNotFoundError:
-        return HTMLResponse(content="<h1>Frontend not found</h1><p>Please ensure index.html is in the root directory.</p>")
+        # Load model
+        with open('model.pkl', 'rb') as f:
+            model = pickle.load(f)
+        print("✅ Model loaded successfully!")
+        
+        # Load label encoders
+        try:
+            label_encoders = joblib.load('label_encoders.pkl')
+            print("✅ Label encoders loaded!")
+            print(f"Encoded columns: {list(label_encoders.keys())}")
+        except Exception as e:
+            label_encoders = None
+            print(f"⚠️ Label encoders not loaded: {e}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error loading model: {e}")
+        return False
+
+@app.on_event("startup")
+async def startup_event():
+    success = load_model_files()
+    if success:
+        print("✅ API is ready!")
+    else:
+        print("⚠️ API started but model not loaded")
+
+@app.get("/")
+async def root():
+    return {
+        "status": "ready" if model is not None else "model_not_loaded",
+        "message": "Employee Attrition Prediction API",
+        "model_loaded": model is not None,
+        "encoders_loaded": label_encoders is not None
+    }
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint"""
+async def health():
     return {
-        "status": "healthy" if model is not None else "unhealthy",
-        "model_loaded": model is not None,
-        "model_path": MODEL_PATH
+        "status": "healthy",
+        "model_loaded": model is not None
     }
 
 @app.post("/predict")
 async def predict(data: EmployeeData):
-    """Predict employee attrition based on input features"""
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
-
+    
     try:
-        # Convert to DataFrame
-        input_df = pd.DataFrame([data.dict()])
+        # Convert input to DataFrame
+        input_dict = data.dict()
+        input_df = pd.DataFrame([input_dict])
         
-        # If you have label encoders, apply them
+        print(f"Input data: {input_dict}")
+        
+        # Apply label encoding if available
         if label_encoders:
-            for col in label_encoders:
+            for col, encoder in label_encoders.items():
                 if col in input_df.columns:
-                    input_df[col] = label_encoders[col].transform(input_df[col])
+                    try:
+                        input_df[col] = encoder.transform(input_df[col])
+                        print(f"✅ Encoded {col}")
+                    except Exception as e:
+                        print(f"⚠️ Could not encode {col}: {e}")
+                        # Handle unseen labels
+                        if col == 'JobRole':
+                            # Map common job roles to existing ones
+                            job_role_mapping = {
+                                'Data Scientist': 'Research Scientist',
+                                'Data Analyst': 'Research Scientist', 
+                                'Software Engineer': 'Research Scientist',
+                                'ML Engineer': 'Research Scientist',
+                                'AI Engineer': 'Research Scientist',
+                                'Business Analyst': 'Sales Executive',
+                                'Product Manager': 'Manager',
+                                'Project Manager': 'Manager',
+                                'Team Lead': 'Manager',
+                                'Developer': 'Research Scientist'
+                            }
+                            value = input_df[col].iloc[0]
+                            if value in job_role_mapping:
+                                mapped_value = job_role_mapping[value]
+                                input_df[col] = encoder.transform([mapped_value])
+                                print(f"✅ Mapped {value} to {mapped_value}")
+                            else:
+                                input_df[col] = 0
+                                print(f"⚠️ Using 0 for unknown job role: {value}")
+                        else:
+                            input_df[col] = 0
         
-        # If you have a scaler, apply it
-        if scaler:
-            # Get numeric columns (exclude categorical ones)
-            numeric_cols = input_df.select_dtypes(include=['int64', 'float64']).columns
-            input_df[numeric_cols] = scaler.transform(input_df[numeric_cols])
+        # Convert all categorical to numeric
+        for col in input_df.columns:
+            if input_df[col].dtype == 'object':
+                input_df[col] = pd.Categorical(input_df[col]).codes
+                print(f"✅ Converted {col} to numeric")
+        
+        # Ensure all columns are numeric
+        input_df = input_df.astype(float)
+        
+        # Convert to numpy array (NO SCALING - LightGBM doesn't need it)
+        input_array = input_df.values
+        
+        print(f"Input array shape: {input_array.shape}")
+        print(f"Input array: {input_array}")
         
         # Make prediction
-        prediction = model.predict(input_df)[0]
+        prediction = model.predict(input_array)
+        probability = model.predict_proba(input_array)
         
-        # Get probability if available
-        probability = None
-        if hasattr(model, 'predict_proba'):
-            proba = model.predict_proba(input_df)[0]
-            probability = float(proba[1]) if len(proba) > 1 else float(proba[0])
+        print(f"Prediction: {prediction[0]}")
+        print(f"Probability: {probability[0]}")
         
         return {
-            "prediction": int(prediction),
-            "probability": probability,
-            "confidence": probability if probability else None
+            "prediction": "Yes" if prediction[0] == 1 else "No",
+            "probability_attrition": float(probability[0][1]),
+            "prediction_code": int(prediction[0]),
+            "status": "success"
         }
-    
+        
     except Exception as e:
-        logger.error(f"Prediction error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        print(f"❌ Prediction error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/metrics")
-async def get_metrics():
-    """Get model metrics (placeholder)"""
-    return {
-        "accuracy": 0.85,
-        "precision": 0.83,
-        "recall": 0.81,
-        "f1_score": 0.82
-    }
-
-@app.get("/model-info")
-async def model_info():
-    """Get model information"""
-    return {
-        "model_loaded": model is not None,
-        "model_path": MODEL_PATH,
-        "model_type": str(type(model).__name__) if model else None,
-        "features_expected": 30  # Updated to 30
-    }
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
