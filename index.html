@@ -1,68 +1,535 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Employee Attrition Predictor</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Employee Attrition Predictor - Complete</title>
     <style>
-        /* Basic styling - you can customize this */
-        body { font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
-        .form-group { margin-bottom: 1rem; }
-        label { display: block; margin-bottom: 0.3rem; font-weight: bold; }
-        input, select { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
-        button { background: #007bff; color: white; padding: 0.7rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; }
-        #result { margin-top: 1.5rem; padding: 1rem; border-radius: 4px; background: #f8f9fa; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 1000px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            color: #2d3748;
+            font-size: 2rem;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .subtitle {
+            color: #718096;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+        }
+        .feature-hint {
+            background: #edf2f7;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+            color: #4a5568;
+            border-left: 4px solid #48bb78;
+        }
+        .feature-hint strong { color: #2d3748; }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .form-group.full-width { grid-column: 1 / -1; }
+        label {
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 0.75rem;
+        }
+        label .required { color: #e53e3e; }
+        input, select {
+            padding: 6px 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            background: #f7fafc;
+            width: 100%;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+        .btn-predict {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+        .btn-predict:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        .btn-predict:disabled { opacity: 0.6; cursor: not-allowed; }
+        .result-box {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 12px;
+            display: none;
+        }
+        .result-box.show { display: block; }
+        .result-box.success { background: #f0fff4; border: 2px solid #48bb78; }
+        .result-box.error { background: #fff5f5; border: 2px solid #fc8181; }
+        .result-box.loading { background: #ebf8ff; border: 2px solid #63b3ed; }
+        .result-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+        .result-value.attrition-yes { color: #e53e3e; }
+        .result-value.attrition-no { color: #38a169; }
+        .result-details {
+            margin-top: 8px;
+            font-size: 0.9rem;
+            color: #4a5568;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 8px;
+            white-space: pre-wrap;
+        }
+        .api-link {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 0.85rem;
+            color: #a0aec0;
+        }
+        .api-link a { color: #667eea; text-decoration: none; }
+        .api-link a:hover { text-decoration: underline; }
+        .field-count {
+            font-size: 0.8rem;
+            color: #48bb78;
+            margin-left: 10px;
+            font-weight: 600;
+        }
+        @media (max-width: 768px) {
+            .container { padding: 20px; }
+            .form-grid { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 500px) {
+            .form-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
-    <h1>📊 Employee Attrition Prediction</h1>
-    <form id="predictionForm">
-        <!-- Replace these fields with your actual input features -->
-        <div class="form-group">
-            <label for="age">Age</label>
-            <input type="number" id="age" name="age" required>
+    <div class="container">
+        <h1>
+            🏢 Attrition Predictor
+            <span class="field-count">✓ 30 Features</span>
+        </h1>
+        <p class="subtitle">Enter employee details to predict if they are likely to leave the company</p>
+
+        <div class="feature-hint">
+            <strong>✅ Model Loaded Successfully!</strong> Your model expects <strong>30 features</strong>.
+            <br>All fields below match your exact dataset schema from the IBM HR Analytics dataset.
         </div>
-        <div class="form-group">
-            <label for="department">Department</label>
-            <select id="department" name="department">
-                <option value="Sales">Sales</option>
-                <option value="R&D">R&D</option>
-                <option value="HR">HR</option>
-            </select>
+
+        <form id="predictionForm">
+            <div class="form-grid">
+                <!-- Demographics (4 features) -->
+                <div class="form-group">
+                    <label for="Age">Age <span class="required">*</span></label>
+                    <input type="number" id="Age" name="Age" required min="18" max="70" value="34" />
+                </div>
+                <div class="form-group">
+                    <label for="Gender">Gender <span class="required">*</span></label>
+                    <select id="Gender" name="Gender" required>
+                        <option value="Male" selected>Male</option>
+                        <option value="Female">Female</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="MaritalStatus">Marital Status <span class="required">*</span></label>
+                    <select id="MaritalStatus" name="MaritalStatus" required>
+                        <option value="Single">Single</option>
+                        <option value="Married" selected>Married</option>
+                        <option value="Divorced">Divorced</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="DistanceFromHome">Distance From Home (miles) <span class="required">*</span></label>
+                    <input type="number" id="DistanceFromHome" name="DistanceFromHome" required min="0" max="50" value="8" />
+                </div>
+
+                <!-- Education & Job (6 features) -->
+                <div class="form-group">
+                    <label for="Education">Education Level (1-5) <span class="required">*</span></label>
+                    <select id="Education" name="Education" required>
+                        <option value="1">1 - Below College</option>
+                        <option value="2">2 - College</option>
+                        <option value="3" selected>3 - Bachelor's</option>
+                        <option value="4">4 - Master's</option>
+                        <option value="5">5 - Doctorate</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="EducationField">Education Field <span class="required">*</span></label>
+                    <select id="EducationField" name="EducationField" required>
+                        <option value="Life Sciences">Life Sciences</option>
+                        <option value="Medical">Medical</option>
+                        <option value="Marketing">Marketing</option>
+                        <option value="Technical Degree" selected>Technical Degree</option>
+                        <option value="Human Resources">Human Resources</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="JobRole">Job Role <span class="required">*</span></label>
+                    <select id="JobRole" name="JobRole" required>
+                        <option value="Sales Executive">Sales Executive</option>
+                        <option value="Research Scientist">Research Scientist</option>
+                        <option value="Laboratory Technician">Laboratory Technician</option>
+                        <option value="Manufacturing Director">Manufacturing Director</option>
+                        <option value="Healthcare Representative">Healthcare Representative</option>
+                        <option value="Manager">Manager</option>
+                        <option value="Human Resources">Human Resources</option>
+                        <option value="Data Scientist" selected>Data Scientist</option>
+                        <option value="Software Engineer">Software Engineer</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="JobLevel">Job Level (1-5) <span class="required">*</span></label>
+                    <select id="JobLevel" name="JobLevel" required>
+                        <option value="1">1 - Entry</option>
+                        <option value="2">2 - Intermediate</option>
+                        <option value="3" selected>3 - Senior</option>
+                        <option value="4">4 - Manager</option>
+                        <option value="5">5 - Director</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="Department">Department <span class="required">*</span></label>
+                    <select id="Department" name="Department" required>
+                        <option value="Sales">Sales</option>
+                        <option value="Research & Development" selected>Research & Development</option>
+                        <option value="Human Resources">Human Resources</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="BusinessTravel">Business Travel <span class="required">*</span></label>
+                    <select id="BusinessTravel" name="BusinessTravel" required>
+                        <option value="Non-Travel">Non-Travel</option>
+                        <option value="Travel_Rarely" selected>Travel Rarely</option>
+                        <option value="Travel_Frequently">Travel Frequently</option>
+                    </select>
+                </div>
+
+                <!-- Compensation (3 features) -->
+                <div class="form-group">
+                    <label for="MonthlyIncome">Monthly Income ($) <span class="required">*</span></label>
+                    <input type="number" id="MonthlyIncome" name="MonthlyIncome" required min="1000" step="100" value="6500" />
+                </div>
+                <div class="form-group">
+                    <label for="DailyRate">Daily Rate ($) <span class="required">*</span></label>
+                    <input type="number" id="DailyRate" name="DailyRate" required min="100" step="10" value="500" />
+                </div>
+                <div class="form-group">
+                    <label for="MonthlyRate">Monthly Rate ($) <span class="required">*</span></label>
+                    <input type="number" id="MonthlyRate" name="MonthlyRate" required min="1000" step="100" value="12000" />
+                </div>
+
+                <!-- Work Experience (5 features) -->
+                <div class="form-group">
+                    <label for="TotalWorkingYears">Total Working Years <span class="required">*</span></label>
+                    <input type="number" id="TotalWorkingYears" name="TotalWorkingYears" required min="0" max="50" value="12" />
+                </div>
+                <div class="form-group">
+                    <label for="YearsAtCompany">Years at Company <span class="required">*</span></label>
+                    <input type="number" id="YearsAtCompany" name="YearsAtCompany" required min="0" max="40" value="5" />
+                </div>
+                <div class="form-group">
+                    <label for="YearsInCurrentRole">Years in Current Role <span class="required">*</span></label>
+                    <input type="number" id="YearsInCurrentRole" name="YearsInCurrentRole" required min="0" max="20" value="3" />
+                </div>
+                <div class="form-group">
+                    <label for="YearsSinceLastPromotion">Years Since Promotion <span class="required">*</span></label>
+                    <input type="number" id="YearsSinceLastPromotion" name="YearsSinceLastPromotion" required min="0" max="30" value="2" />
+                </div>
+                <div class="form-group">
+                    <label for="YearsWithCurrManager">Years with Current Manager <span class="required">*</span></label>
+                    <input type="number" id="YearsWithCurrManager" name="YearsWithCurrManager" required min="0" max="20" value="4" />
+                </div>
+
+                <!-- Career & Performance (6 features) -->
+                <div class="form-group">
+                    <label for="NumCompaniesWorked">Companies Worked <span class="required">*</span></label>
+                    <input type="number" id="NumCompaniesWorked" name="NumCompaniesWorked" required min="0" max="20" value="2" />
+                </div>
+                <div class="form-group">
+                    <label for="PercentSalaryHike">Salary Hike (%) <span class="required">*</span></label>
+                    <input type="number" id="PercentSalaryHike" name="PercentSalaryHike" required min="0" max="50" step="1" value="15" />
+                </div>
+                <div class="form-group">
+                    <label for="PerformanceRating">Performance Rating (1-4) <span class="required">*</span></label>
+                    <select id="PerformanceRating" name="PerformanceRating" required>
+                        <option value="1">1 - Low</option>
+                        <option value="2">2 - Good</option>
+                        <option value="3" selected>3 - Excellent</option>
+                        <option value="4">4 - Outstanding</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="TrainingTimesLastYear">Training Times (Year) <span class="required">*</span></label>
+                    <input type="number" id="TrainingTimesLastYear" name="TrainingTimesLastYear" required min="0" max="10" value="3" />
+                </div>
+                <div class="form-group">
+                    <label for="StockOptionLevel">Stock Option Level <span class="required">*</span></label>
+                    <select id="StockOptionLevel" name="StockOptionLevel" required>
+                        <option value="0">0 - None</option>
+                        <option value="1" selected>1 - Low</option>
+                        <option value="2">2 - Medium</option>
+                        <option value="3">3 - High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="OverTime">Overtime <span class="required">*</span></label>
+                    <select id="OverTime" name="OverTime" required>
+                        <option value="Yes">Yes</option>
+                        <option value="No" selected>No</option>
+                    </select>
+                </div>
+
+                <!-- Satisfaction (6 features) -->
+                <div class="form-group">
+                    <label for="EnvironmentSatisfaction">Environment Sat. (1-4) <span class="required">*</span></label>
+                    <select id="EnvironmentSatisfaction" name="EnvironmentSatisfaction" required>
+                        <option value="1">1 - Very Low</option>
+                        <option value="2">2 - Low</option>
+                        <option value="3" selected>3 - High</option>
+                        <option value="4">4 - Very High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="JobSatisfaction">Job Sat. (1-4) <span class="required">*</span></label>
+                    <select id="JobSatisfaction" name="JobSatisfaction" required>
+                        <option value="1">1 - Very Low</option>
+                        <option value="2">2 - Low</option>
+                        <option value="3">3 - High</option>
+                        <option value="4" selected>4 - Very High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="WorkLifeBalance">Work-Life Balance (1-4) <span class="required">*</span></label>
+                    <select id="WorkLifeBalance" name="WorkLifeBalance" required>
+                        <option value="1">1 - Poor</option>
+                        <option value="2">2 - Fair</option>
+                        <option value="3" selected>3 - Good</option>
+                        <option value="4">4 - Excellent</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="RelationshipSatisfaction">Relationship Sat. (1-4) <span class="required">*</span></label>
+                    <select id="RelationshipSatisfaction" name="RelationshipSatisfaction" required>
+                        <option value="1">1 - Very Low</option>
+                        <option value="2">2 - Low</option>
+                        <option value="3" selected>3 - High</option>
+                        <option value="4">4 - Very High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="JobInvolvement">Job Involvement (1-4) <span class="required">*</span></label>
+                    <select id="JobInvolvement" name="JobInvolvement" required>
+                        <option value="1">1 - Very Low</option>
+                        <option value="2">2 - Low</option>
+                        <option value="3" selected>3 - High</option>
+                        <option value="4">4 - Very High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="HourlyRate">Hourly Rate ($) <span class="required">*</span></label>
+                    <input type="number" id="HourlyRate" name="HourlyRate" required min="10" max="100" step="5" value="45" />
+                </div>
+
+                <button type="submit" class="btn-predict" id="predictBtn">🔍 Predict Attrition</button>
+            </div>
+        </form>
+
+        <div id="resultBox" class="result-box">
+            <div class="result-value" id="resultValue">—</div>
+            <div class="result-details" id="resultDetails"></div>
         </div>
-        <!-- Add more fields as needed -->
-        <button type="submit">Predict</button>
-    </form>
-    <div id="result">Prediction will appear here.</div>
+
+        <div class="api-link">
+            📡 <a href="https://employee-attrition-prediction-api-1.onrender.com/docs" target="_blank">API Documentation</a>
+            &nbsp;|&nbsp;
+            🔗 <a href="https://employee-attrition-prediction-api-1.onrender.com/openapi.json" target="_blank">OpenAPI Spec</a>
+        </div>
+    </div>
 
     <script>
-        document.getElementById('predictionForm').addEventListener('submit', async (e) => {
+        const API_BASE = 'https://employee-attrition-prediction-api-1.onrender.com';
+        const form = document.getElementById('predictionForm');
+        const predictBtn = document.getElementById('predictBtn');
+        const resultBox = document.getElementById('resultBox');
+        const resultValue = document.getElementById('resultValue');
+        const resultDetails = document.getElementById('resultDetails');
+
+        // The exact 30 features your model expects
+        const modelFeatures = [
+            'Age', 'BusinessTravel', 'DailyRate', 'Department', 'DistanceFromHome',
+            'Education', 'EducationField', 'EnvironmentSatisfaction', 'Gender',
+            'HourlyRate', 'JobInvolvement', 'JobLevel', 'JobRole', 'JobSatisfaction',
+            'MaritalStatus', 'MonthlyIncome', 'MonthlyRate', 'NumCompaniesWorked',
+            'OverTime', 'PercentSalaryHike', 'PerformanceRating', 'RelationshipSatisfaction',
+            'StockOptionLevel', 'TotalWorkingYears', 'TrainingTimesLastYear',
+            'WorkLifeBalance', 'YearsAtCompany', 'YearsInCurrentRole',
+            'YearsSinceLastPromotion', 'YearsWithCurrManager'
+        ];
+
+        function showResult(message, type = 'success', details = '') {
+            resultBox.className = 'result-box show ' + type;
+            resultValue.textContent = message;
+            if (type === 'success') {
+                const lowerMsg = message.toLowerCase();
+                resultValue.className = 'result-value ' + (lowerMsg.includes('yes') || lowerMsg.includes('will leave') ? 'attrition-yes' : 'attrition-no');
+            }
+            resultDetails.textContent = details;
+        }
+
+        function setLoading(isLoading) {
+            predictBtn.disabled = isLoading;
+            predictBtn.textContent = isLoading ? '⏳ Analyzing...' : '🔍 Predict Attrition';
+            if (isLoading) {
+                resultBox.className = 'result-box show loading';
+                resultValue.textContent = 'Processing employee data...';
+                resultDetails.textContent = 'The AI is analyzing all 30 features to predict attrition risk.';
+            }
+        }
+
+        function extractNumeric(value) {
+            if (typeof value === 'string') {
+                const cleaned = value.replace(/[^0-9.]/g, '');
+                return parseFloat(cleaned) || 0;
+            }
+            return value || 0;
+        }
+
+        form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const resultDiv = document.getElementById('result');
-            resultDiv.textContent = 'Predicting...';
+            const formData = new FormData(form);
+            const requestData = {};
 
-            // Collect form data into an object matching your API's expected format
-            const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData.entries());
-            // Convert numeric values if needed
-            data.age = parseInt(data.age);
+            // Build request with exactly the 30 features
+            for (let field of modelFeatures) {
+                const value = formData.get(field);
+                if (!value || value === '') {
+                    showResult('❌ Missing Field', 'error', `Please fill in: ${field}`);
+                    return;
+                }
+                // Convert numeric fields
+                const numericFields = [
+                    'Age', 'DailyRate', 'DistanceFromHome', 'Education',
+                    'EnvironmentSatisfaction', 'HourlyRate', 'JobInvolvement', 'JobLevel',
+                    'JobSatisfaction', 'MonthlyIncome', 'MonthlyRate', 'NumCompaniesWorked',
+                    'PercentSalaryHike', 'PerformanceRating', 'RelationshipSatisfaction',
+                    'StockOptionLevel', 'TotalWorkingYears', 'TrainingTimesLastYear',
+                    'WorkLifeBalance', 'YearsAtCompany', 'YearsInCurrentRole',
+                    'YearsSinceLastPromotion', 'YearsWithCurrManager'
+                ];
+                
+                if (numericFields.includes(field)) {
+                    requestData[field] = extractNumeric(value);
+                } else {
+                    requestData[field] = value;
+                }
+            }
 
+            console.log('📤 Sending exactly', Object.keys(requestData).length, 'features');
+            console.log('📤 Features:', Object.keys(requestData).join(', '));
+
+            setLoading(true);
             try {
-                // **REPLACE THIS URL with your actual prediction endpoint**
-                const response = await fetch('https://employee-attrition-prediction-api-1.onrender.com/predict', {
+                const response = await fetch(API_BASE + '/predict', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
+                    body: JSON.stringify(requestData)
                 });
 
-                if (!response.ok) throw new Error(`API error: ${response.status}`);
-                const result = await response.json();
-                // **Adjust this based on your actual response structure**
-                resultDiv.textContent = `Prediction: ${result.prediction || result.result || JSON.stringify(result)}`;
-                resultDiv.style.background = '#d4edda';
+                const text = await response.text();
+                let result;
+                try { result = JSON.parse(text); } catch (e) { result = { message: text }; }
+
+                if (!response.ok) {
+                    let errorMsg = '';
+                    if (Array.isArray(result)) {
+                        errorMsg = result.map(e => e.msg || JSON.stringify(e)).join(', ');
+                    } else if (result.detail) {
+                        errorMsg = Array.isArray(result.detail) ? result.detail.map(e => e.msg).join(', ') : result.detail;
+                    } else {
+                        errorMsg = result.message || `HTTP ${response.status}`;
+                    }
+                    throw new Error(errorMsg);
+                }
+
+                let prediction = 'No (Likely to Stay)';
+                if (result.prediction !== undefined && result.prediction !== null) {
+                    const p = result.prediction;
+                    if (typeof p === 'boolean') {
+                        prediction = p ? 'Yes (Will Leave)' : 'No (Will Stay)';
+                    } else if (typeof p === 'number') {
+                        prediction = p === 1 ? 'Yes (Will Leave)' : 'No (Will Stay)';
+                    } else {
+                        prediction = String(p);
+                    }
+                } else if (result.result) {
+                    prediction = String(result.result);
+                } else if (result.attrition) {
+                    prediction = String(result.attrition);
+                } else {
+                    prediction = 'Prediction received';
+                }
+
+                let details = '';
+                if (result.confidence !== undefined && result.confidence !== null) {
+                    const c = parseFloat(result.confidence);
+                    if (!isNaN(c)) details += `Confidence: ${(c * 100).toFixed(1)}%`;
+                }
+                if (result.probability !== undefined && result.probability !== null) {
+                    const p = parseFloat(result.probability);
+                    if (!isNaN(p)) details += (details ? ' | ' : '') + `Probability: ${(p * 100).toFixed(1)}%`;
+                }
+                if (!details) details = 'Prediction complete';
+
+                showResult(`🎯 ${prediction}`, 'success', details);
+
             } catch (error) {
-                resultDiv.textContent = `Error: ${error.message}`;
-                resultDiv.style.background = '#f8d7da';
+                showResult('❌ Error', 'error', 
+                    `Prediction failed: ${error.message}\n\n💡 The model expects exactly 30 features. All fields are filled.`);
+            } finally {
+                setLoading(false);
             }
         });
     </script>
